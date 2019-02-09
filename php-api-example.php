@@ -8,11 +8,12 @@ Example:
 // your api credentials
 $key = 'your-API-key';
 $secret = 'your-API-secret';
+$username = 'your-email';
 
 $url = 'https://api.mistertango.com:8445';
 $sslverify = true;
 
-$mt = new MTapi($key, $secret, $url, $sslverify);
+$mt = new MTapi($key, $secret, $username, $url, $sslverify);
 
 $res = $mt->QueryPublic('/v1/utility/getCountriesList');
 print_r($res);
@@ -27,6 +28,7 @@ class MTapi
 {
     protected $key;     // API key
     protected $secret;  // API secret
+    protected $username; // User email
     protected $url;     // API base URL
     protected $curl;    // curl handle
 
@@ -35,35 +37,37 @@ class MTapi
      *
      * @param string $key API key
      * @param string $secret API secret
+     * @param string $username email
      * @param string $url base URL for API
      */
-    function __construct($key='', $secret='', $url='', $sslverify=true)
+    function __construct($key='', $secret='', $username='', $url='', $sslverify=true)
     {
 
         /* check we have curl */
         if(!function_exists('curl_init')) {
-         print "[ERROR] The API client requires that PHP is compiled with 'curl' support.\n";
-         exit(1);
+            print "[ERROR] The API client requires that PHP is compiled with 'curl' support.\n";
+            exit(1);
         }
 
         $this->key = $key;
         $this->secret = $secret;
+        $this->username = $username;
         $this->url = $url;
         $this->curl = curl_init();
 
         curl_setopt_array($this->curl, array(
-            CURLOPT_SSL_VERIFYPEER => $sslverify,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_USERAGENT => 'MTapi',
-            CURLOPT_RETURNTRANSFER => true)
+                CURLOPT_SSL_VERIFYPEER => $sslverify,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_USERAGENT => 'MTapi',
+                CURLOPT_RETURNTRANSFER => true)
         );
     }
 
     function __destruct()
     {
-    	if(function_exists('curl_close')) {
-         curl_close($this->curl);
-	}
+        if(function_exists('curl_close')) {
+            curl_close($this->curl);
+        }
     }
 
     /**
@@ -77,9 +81,9 @@ class MTapi
     function QueryPublic($method, array $request = array())
     {
         curl_setopt_array($this->curl, array(CURLOPT_POST => false)     );
-		
-		
-		// build the POST data string
+
+
+        // build the POST data string
         $postdata = http_build_query($request, '', '&');
         if ($postdata)   $postdata='?'.$postdata;
         // make request
@@ -107,7 +111,11 @@ class MTapi
     function QueryPrivate($method, array $request = array())
     {
         curl_setopt_array($this->curl, array(CURLOPT_POST => true)     );
-		 
+
+        if (!isset($request['username'])) {
+            $request = ['username' => $this->username] + $request;
+        }
+
         if (!isset($request['nonce'])) {
             $request['nonce'] = str_pad(str_replace('.', '', microtime(true)), 18, "0", STR_PAD_RIGHT);
         }
@@ -118,14 +126,14 @@ class MTapi
         // set API key and sign the message
         $path =  $method;
         $sign = hash_hmac('sha512', $path . hash('sha256', $request['nonce'] . $postdata, true), $this->secret, true) ;
- 
-		$headers = array(
+
+        $headers = array(
             'X-API-KEY: ' . $this->key,
             'X-API-SIGN: ' . base64_encode($sign),
             'X-API-NONCE: ' . $request['nonce']
         );
-		
-		
+
+
         // make request
         curl_setopt($this->curl, CURLOPT_URL, $this->url . $path);
         curl_setopt($this->curl, CURLOPT_POSTFIELDS, $postdata);
